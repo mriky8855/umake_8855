@@ -1,8 +1,10 @@
 #include "Characters/AIStateMachine/AIStateMachineComponent.h"
+
 #include "Characters/AICharacter/H2AICharacter.h"
 #include "Characters/AICombatComponent/AICombatComponent.h"
 
 #include "AIController.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 UAIStateMachineComponent::UAIStateMachineComponent()
 {
@@ -16,10 +18,14 @@ void UAIStateMachineComponent::BeginPlay()
 	OwnerAI = Cast<AH2AICharacter>(GetOwner());
 
 	CurrentState = EAIState::Idle;
+
+	TargetActor = nullptr;
 }
 
 void UAIStateMachineComponent::SetTarget(AActor* Actor)
 {
+	if (!Actor) return;
+
 	TargetActor = Actor;
 
 	CurrentState = EAIState::Detect;
@@ -35,26 +41,24 @@ void UAIStateMachineComponent::ClearTarget(AActor* Actor)
 	}
 }
 
-void UAIStateMachineComponent::RotateTowardsTarget()
+void UAIStateMachineComponent::UpdateCombatFocus()
 {
 	if (!OwnerAI || !TargetActor) return;
 
-	AAIController* AIController = Cast<AAIController>(OwnerAI->GetController());
-	if (!AIController) return;
-
 	FVector Direction = TargetActor->GetActorLocation() - OwnerAI->GetActorLocation();
+
 	Direction.Z = 0;
 
 	FRotator TargetRotation = Direction.Rotation();
 
 	FRotator NewRotation = FMath::RInterpTo(
-		AIController->GetControlRotation(),
+		OwnerAI->GetActorRotation(),
 		TargetRotation,
 		GetWorld()->GetDeltaSeconds(),
-		8.f
+		10.f
 	);
 
-	AIController->SetControlRotation(NewRotation);
+	OwnerAI->SetActorRotation(NewRotation);
 }
 
 void UAIStateMachineComponent::TickComponent(
@@ -69,37 +73,110 @@ void UAIStateMachineComponent::TickComponent(
 	AAIController* AIController = Cast<AAIController>(OwnerAI->GetController());
 	if (!AIController) return;
 
+	/* Always face combat target */
+	if (TargetActor)
+	{
+		UpdateCombatFocus();
+	}
+
 	switch (CurrentState)
 	{
 
+	/* ----------------------------------------------------- */
 	case EAIState::Idle:
+
 		break;
 
+	/* ----------------------------------------------------- */
 	case EAIState::Detect:
 
 		OwnerAI->AICombat->EquipDagger();
+
+		if (OwnerAI->GetCharacterMovement())
+		{
+			OwnerAI->GetCharacterMovement()->MaxWalkSpeed = OwnerAI->CombatSpeed;
+		}
 
 		CurrentState = EAIState::Follow;
 
 		break;
 
+	/* ----------------------------------------------------- */
+	case EAIState::Equip:
+
+		OwnerAI->AICombat->EquipDagger();
+
+		if (OwnerAI->GetCharacterMovement())
+		{
+			OwnerAI->GetCharacterMovement()->MaxWalkSpeed = OwnerAI->CombatSpeed;
+		}
+
+		CurrentState = EAIState::Follow;
+
+		break;
+
+	/* ----------------------------------------------------- */
 	case EAIState::Follow:
 
 		if (!TargetActor) return;
 
-		RotateTowardsTarget();
+	{
+		float Distance = FVector::Dist(
+			OwnerAI->GetActorLocation(),
+			TargetActor->GetActorLocation());
+
+		/* Too far → sprint */
+		if (OwnerAI->bCanSprint && Distance > OwnerAI->SprintDistance)
+		{
+			CurrentState = EAIState::Unequip;
+			break;
+		}
 
 		AIController->MoveToActor(TargetActor, AcceptanceRadius);
 
-		if (FVector::Dist(
-			OwnerAI->GetActorLocation(),
-			TargetActor->GetActorLocation()) <= AttackRange)
+		if (Distance <= AttackRange)
 		{
 			CurrentState = EAIState::Attack;
 		}
+	}
+
+	break;
+
+	/* ----------------------------------------------------- */
+	case EAIState::Unequip:
+
+		OwnerAI->AICombat->UnequipWeapon();
+
+		if (OwnerAI->GetCharacterMovement())
+		{
+			OwnerAI->GetCharacterMovement()->MaxWalkSpeed = OwnerAI->SprintSpeed;
+		}
+
+		CurrentState = EAIState::Sprint;
 
 		break;
 
+	/* ----------------------------------------------------- */
+	case EAIState::Sprint:
+
+		if (!TargetActor) return;
+
+	{
+		AIController->MoveToActor(TargetActor, AcceptanceRadius);
+
+		float Distance = FVector::Dist(
+			OwnerAI->GetActorLocation(),
+			TargetActor->GetActorLocation());
+
+		if (Distance <= OwnerAI->SprintDistance)
+		{
+			CurrentState = EAIState::Equip;
+		}
+	}
+
+	break;
+
+	/* ----------------------------------------------------- */
 	case EAIState::Attack:
 
 	{
@@ -107,28 +184,27 @@ void UAIStateMachineComponent::TickComponent(
 
 		if (Time - LastAttackTime >= AttackCooldown)
 		{
-			RotateTowardsTarget();
-
 			OwnerAI->AICombat->Attack();
 
 			LastAttackTime = Time;
 
 			CurrentState = EAIState::Wait;
 		}
-
-		break;
 	}
 
+	break;
+
+	/* ----------------------------------------------------- */
 	case EAIState::Wait:
 
-		if (TargetActor)
-		{
-			RotateTowardsTarget();
-		}
+		if (!TargetActor) return;
 
-		if (FVector::Dist(
+	{
+		float Distance = FVector::Dist(
 			OwnerAI->GetActorLocation(),
-			TargetActor->GetActorLocation()) > AttackRange)
+			TargetActor->GetActorLocation());
+
+		if (Distance > AttackRange)
 		{
 			CurrentState = EAIState::Follow;
 		}
@@ -136,9 +212,11 @@ void UAIStateMachineComponent::TickComponent(
 		{
 			CurrentState = EAIState::Attack;
 		}
+	}
 
-		break;
+	break;
 
+	/* ----------------------------------------------------- */
 	default:
 		break;
 	}

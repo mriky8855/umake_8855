@@ -9,13 +9,14 @@ class AH2AICharacter;
 UENUM(BlueprintType)
 enum class EAIState : uint8
 {
-	Idle,
-	Detect,
-	Equip,
-	Follow,
-	Attack,
-	Wait,
-	Unequip
+    Idle,
+    Detect,
+    Equip,
+    Follow,
+    Sprint,
+    Attack,
+    Wait,
+    Unequip
 };
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -47,6 +48,8 @@ public:
 
 	void SetTarget(AActor* Actor);
 	void ClearTarget(AActor* Actor);
+
+    void UpdateCombatFocus();
 
 	/* Blueprint Tunables */
 

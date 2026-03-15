@@ -57,5 +57,19 @@ public:
 	UPROPERTY(VisibleAnywhere)
 	UAIPerceptionHandler* PerceptionHandler;
 
+	/* AI Characteristics */
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Traits")
+	bool bCanSprint = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Traits")
+	float SprintSpeed = 650.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Traits")
+	float CombatSpeed = 300.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Traits")
+	float SprintDistance = 800.f;
+
 
 };
