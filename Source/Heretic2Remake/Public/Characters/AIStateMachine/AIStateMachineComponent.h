@@ -44,11 +44,15 @@ private:
 
     AActor* TargetActor;
 
-    float AttackRange;
-
 public:
 
     void SetTarget(AActor* Actor);
     void ClearTarget(AActor* Actor);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
+    float AttackRange = 120.f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
+    float AcceptanceRadius = 80.f;
 
 };

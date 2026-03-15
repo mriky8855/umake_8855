@@ -72,14 +72,13 @@ void UAIStateMachineComponent::TickComponent(
 
     case EAIState::Follow:
 
-        if(!TargetActor)
-            return;
+        if(!TargetActor) return;
 
-        AIController->MoveToActor(TargetActor, AttackRange);
+        AIController->MoveToActor(TargetActor, AcceptanceRadius);
 
         if(FVector::Dist(
             OwnerAI->GetActorLocation(),
-            TargetActor->GetActorLocation()) < AttackRange)
+            TargetActor->GetActorLocation()) <= AttackRange)
         {
             CurrentState = EAIState::Attack;
         }
@@ -89,6 +88,10 @@ void UAIStateMachineComponent::TickComponent(
     case EAIState::Attack:
 
         OwnerAI->AICombat->Attack();
+
+        OwnerAI->SetActorRotation(
+            (TargetActor->GetActorLocation() - OwnerAI->GetActorLocation()).Rotation()
+        );
 
         CurrentState = EAIState::Wait;
 
