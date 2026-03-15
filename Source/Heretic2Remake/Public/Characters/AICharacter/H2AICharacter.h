@@ -18,6 +18,8 @@ enum class EAIType : uint8
 	Neutral
 };
 
+
+
 UCLASS()
 class HERETIC2REMAKE_API AH2AICharacter : public AH2Character
 {
@@ -54,4 +56,6 @@ public:
 
 	UPROPERTY(VisibleAnywhere)
 	UAIPerceptionHandler* PerceptionHandler;
+
+
 };

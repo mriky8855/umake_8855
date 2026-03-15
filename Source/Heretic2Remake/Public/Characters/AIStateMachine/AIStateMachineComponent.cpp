@@ -3,108 +3,143 @@
 #include "Characters/AICombatComponent/AICombatComponent.h"
 
 #include "AIController.h"
-#include "Kismet/GameplayStatics.h"
 
 UAIStateMachineComponent::UAIStateMachineComponent()
 {
-    PrimaryComponentTick.bCanEverTick = true;
-
-    AttackRange = 150.f;
+	PrimaryComponentTick.bCanEverTick = true;
 }
 
 void UAIStateMachineComponent::BeginPlay()
 {
-    Super::BeginPlay();
+	Super::BeginPlay();
 
-    OwnerAI = Cast<AH2AICharacter>(GetOwner());
+	OwnerAI = Cast<AH2AICharacter>(GetOwner());
 
-    CurrentState = EAIState::Idle;
-
-    TargetActor = nullptr;
+	CurrentState = EAIState::Idle;
 }
 
 void UAIStateMachineComponent::SetTarget(AActor* Actor)
 {
-    TargetActor = Actor;
+	TargetActor = Actor;
 
-    CurrentState = EAIState::Detect;
+	CurrentState = EAIState::Detect;
 }
 
 void UAIStateMachineComponent::ClearTarget(AActor* Actor)
 {
-    if(TargetActor == Actor)
-    {
-        TargetActor = nullptr;
+	if (TargetActor == Actor)
+	{
+		TargetActor = nullptr;
 
-        CurrentState = EAIState::Idle;
-    }
+		CurrentState = EAIState::Idle;
+	}
+}
+
+void UAIStateMachineComponent::RotateTowardsTarget()
+{
+	if (!OwnerAI || !TargetActor) return;
+
+	AAIController* AIController = Cast<AAIController>(OwnerAI->GetController());
+	if (!AIController) return;
+
+	FVector Direction = TargetActor->GetActorLocation() - OwnerAI->GetActorLocation();
+	Direction.Z = 0;
+
+	FRotator TargetRotation = Direction.Rotation();
+
+	FRotator NewRotation = FMath::RInterpTo(
+		AIController->GetControlRotation(),
+		TargetRotation,
+		GetWorld()->GetDeltaSeconds(),
+		8.f
+	);
+
+	AIController->SetControlRotation(NewRotation);
 }
 
 void UAIStateMachineComponent::TickComponent(
-    float DeltaTime,
-    ELevelTick TickType,
-    FActorComponentTickFunction* ThisTickFunction)
+	float DeltaTime,
+	ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
 {
-    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    if(!OwnerAI)
-        return;
+	if (!OwnerAI) return;
 
-    AAIController* AIController = Cast<AAIController>(OwnerAI->GetController());
+	AAIController* AIController = Cast<AAIController>(OwnerAI->GetController());
+	if (!AIController) return;
 
-    if(!AIController)
-        return;
+	switch (CurrentState)
+	{
 
-    switch(CurrentState)
-    {
+	case EAIState::Idle:
+		break;
 
-    case EAIState::Idle:
+	case EAIState::Detect:
 
-        break;
+		OwnerAI->AICombat->EquipDagger();
 
-    case EAIState::Detect:
+		CurrentState = EAIState::Follow;
 
-        OwnerAI->AICombat->EquipDagger();
+		break;
 
-        CurrentState = EAIState::Follow;
+	case EAIState::Follow:
 
-        break;
+		if (!TargetActor) return;
 
-    case EAIState::Follow:
+		RotateTowardsTarget();
 
-        if(!TargetActor) return;
+		AIController->MoveToActor(TargetActor, AcceptanceRadius);
 
-        AIController->MoveToActor(TargetActor, AcceptanceRadius);
+		if (FVector::Dist(
+			OwnerAI->GetActorLocation(),
+			TargetActor->GetActorLocation()) <= AttackRange)
+		{
+			CurrentState = EAIState::Attack;
+		}
 
-        if(FVector::Dist(
-            OwnerAI->GetActorLocation(),
-            TargetActor->GetActorLocation()) <= AttackRange)
-        {
-            CurrentState = EAIState::Attack;
-        }
+		break;
 
-        break;
+	case EAIState::Attack:
 
-    case EAIState::Attack:
+	{
+		float Time = GetWorld()->GetTimeSeconds();
 
-        OwnerAI->AICombat->Attack();
+		if (Time - LastAttackTime >= AttackCooldown)
+		{
+			RotateTowardsTarget();
 
-        OwnerAI->SetActorRotation(
-            (TargetActor->GetActorLocation() - OwnerAI->GetActorLocation()).Rotation()
-        );
+			OwnerAI->AICombat->Attack();
 
-        CurrentState = EAIState::Wait;
+			LastAttackTime = Time;
 
-        break;
+			CurrentState = EAIState::Wait;
+		}
 
-    case EAIState::Wait:
+		break;
+	}
 
-        CurrentState = EAIState::Follow;
+	case EAIState::Wait:
 
-        break;
+		if (TargetActor)
+		{
+			RotateTowardsTarget();
+		}
 
-    default:
-        break;
+		if (FVector::Dist(
+			OwnerAI->GetActorLocation(),
+			TargetActor->GetActorLocation()) > AttackRange)
+		{
+			CurrentState = EAIState::Follow;
+		}
+		else
+		{
+			CurrentState = EAIState::Attack;
+		}
 
-    }
+		break;
+
+	default:
+		break;
+	}
 }

@@ -9,50 +9,59 @@ class AH2AICharacter;
 UENUM(BlueprintType)
 enum class EAIState : uint8
 {
-    Idle,
-    Detect,
-    Equip,
-    Follow,
-    Attack,
-    Wait,
-    Unequip
+	Idle,
+	Detect,
+	Equip,
+	Follow,
+	Attack,
+	Wait,
+	Unequip
 };
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class HERETIC2REMAKE_API UAIStateMachineComponent : public UActorComponent
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
 
-    UAIStateMachineComponent();
+	UAIStateMachineComponent();
 
 protected:
 
-    virtual void BeginPlay() override;
-    virtual void TickComponent(
-        float DeltaTime,
-        ELevelTick TickType,
-        FActorComponentTickFunction* ThisTickFunction
-    ) override;
+	virtual void BeginPlay() override;
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
 
-    AH2AICharacter* OwnerAI;
+	AH2AICharacter* OwnerAI;
 
-    EAIState CurrentState;
+	EAIState CurrentState;
 
-    AActor* TargetActor;
+	AActor* TargetActor;
 
 public:
 
-    void SetTarget(AActor* Actor);
-    void ClearTarget(AActor* Actor);
+	void SetTarget(AActor* Actor);
+	void ClearTarget(AActor* Actor);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
-    float AttackRange = 120.f;
+	/* Blueprint Tunables */
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
-    float AcceptanceRadius = 80.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
+	float AttackRange = 120.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
+	float AcceptanceRadius = 90.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
+	float AttackCooldown = 1.5f;
+
+private:
+
+	float LastAttackTime = -100.f;
+
+	void RotateTowardsTarget();
 };

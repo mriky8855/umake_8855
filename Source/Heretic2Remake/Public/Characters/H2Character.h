@@ -20,7 +20,14 @@ class UAnimMontage;
 class AWeapon;
 class UUserWidget;
 
-
+UENUM(BlueprintType)
+enum class ETeamID : uint8
+{
+	Player = 0,
+	Friendly = 0,
+	Enemy = 1,
+	Neutral = 2
+};
 
 UCLASS()
 class HERETIC2REMAKE_API AH2Character : public ACharacter
@@ -134,6 +141,13 @@ public:
 	UPROPERTY(EditAnywhere, Category="Camera|ADS")
 	float ADSCameraInterpSpeed;
 
+	// ===============================
+	// TEAM SETTINGS
+	// ===============================
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Team")
+	ETeamID TeamID = ETeamID::Neutral;
+
 private:
 
 	// ===============================
@@ -151,6 +165,7 @@ private:
 
 	UPROPERTY()
 	UInventoryComponent* InventoryComponent;
+
 
 	// ===============================
 	// MONTAGES
