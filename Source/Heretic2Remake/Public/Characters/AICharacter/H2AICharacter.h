@@ -71,5 +71,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Traits")
 	float SprintDistance = 800.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float OrbitRadius = 200.f;
+
 
 };

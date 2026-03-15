@@ -2,9 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Characters/AICombatSlots/CombatSlotManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "AIStateMachineComponent.generated.h"
 
+
 class AH2AICharacter;
+
+class ACombatSlotManager;
 
 UENUM(BlueprintType)
 enum class EAIState : uint8
@@ -62,9 +67,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI")
 	float AttackCooldown = 1.5f;
 
+	ACombatSlotManager* SlotManager = nullptr;
+
+	bool bHasCombatSlot = false;
+
+	int32 CombatSlotIndex = -1;
+
 private:
 
 	float LastAttackTime = -100.f;
 
 	void RotateTowardsTarget();
+
+	
 };

@@ -36,4 +36,7 @@ AH2AICharacter::AH2AICharacter()
 void AH2AICharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	bUseControllerRotationYaw = false;
 }

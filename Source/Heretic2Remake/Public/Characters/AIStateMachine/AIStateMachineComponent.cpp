@@ -20,11 +20,52 @@ void UAIStateMachineComponent::BeginPlay()
 	CurrentState = EAIState::Idle;
 
 	TargetActor = nullptr;
+
+	if (!OwnerAI) return;
+
+	/* Find Combat Slot Manager */
+	SlotManager = Cast<ACombatSlotManager>(
+		UGameplayStatics::GetActorOfClass(
+			GetWorld(),
+			ACombatSlotManager::StaticClass()
+		)
+	);
+
+	/* Friendly AI follows player automatically */
+	if (OwnerAI->TeamID == ETeamID::Friendly)
+	{
+		APawn* PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn();
+
+		if (PlayerPawn)
+		{
+			TargetActor = PlayerPawn;
+
+			CurrentState = EAIState::Follow;
+		}
+	}
 }
 
 void UAIStateMachineComponent::SetTarget(AActor* Actor)
 {
-	if (!Actor) return;
+	if (!Actor || !OwnerAI)
+		return;
+
+	AH2Character* OwnerChar = Cast<AH2Character>(OwnerAI);
+	AH2Character* TargetChar = Cast<AH2Character>(Actor);
+
+	if (!OwnerChar || !TargetChar)
+		return;
+
+	/* Ignore same team */
+	if (OwnerChar->TeamID == TargetChar->TeamID)
+		return;
+
+	/* Friend only attacks enemies */
+	if ((OwnerChar->TeamID == ETeamID::Friendly || OwnerChar->TeamID == ETeamID::Player) &&
+		TargetChar->TeamID != ETeamID::Enemy)
+	{
+		return;
+	}
 
 	TargetActor = Actor;
 
@@ -43,22 +84,27 @@ void UAIStateMachineComponent::ClearTarget(AActor* Actor)
 
 void UAIStateMachineComponent::UpdateCombatFocus()
 {
-	if (!OwnerAI || !TargetActor) return;
+	if (!OwnerAI || !TargetActor)
+		return;
 
-	FVector Direction = TargetActor->GetActorLocation() - OwnerAI->GetActorLocation();
+	FVector Direction =
+		TargetActor->GetActorLocation() - OwnerAI->GetActorLocation();
 
 	Direction.Z = 0;
 
+	if (Direction.IsNearlyZero())
+		return;
+
 	FRotator TargetRotation = Direction.Rotation();
 
-	FRotator NewRotation = FMath::RInterpTo(
-		OwnerAI->GetActorRotation(),
-		TargetRotation,
-		GetWorld()->GetDeltaSeconds(),
-		10.f
+	OwnerAI->SetActorRotation(
+		FMath::RInterpTo(
+			OwnerAI->GetActorRotation(),
+			TargetRotation,
+			GetWorld()->GetDeltaSeconds(),
+			12.f
+		)
 	);
-
-	OwnerAI->SetActorRotation(NewRotation);
 }
 
 void UAIStateMachineComponent::TickComponent(
@@ -73,7 +119,7 @@ void UAIStateMachineComponent::TickComponent(
 	AAIController* AIController = Cast<AAIController>(OwnerAI->GetController());
 	if (!AIController) return;
 
-	/* Always face combat target */
+	/* Always face target */
 	if (TargetActor)
 	{
 		UpdateCombatFocus();
@@ -82,15 +128,18 @@ void UAIStateMachineComponent::TickComponent(
 	switch (CurrentState)
 	{
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Idle:
 
 		break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Detect:
 
-		OwnerAI->AICombat->EquipDagger();
+		if (OwnerAI->AICombat)
+		{
+			OwnerAI->AICombat->EquipDagger();
+		}
 
 		if (OwnerAI->GetCharacterMovement())
 		{
@@ -101,10 +150,13 @@ void UAIStateMachineComponent::TickComponent(
 
 		break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Equip:
 
-		OwnerAI->AICombat->EquipDagger();
+		if (OwnerAI->AICombat)
+		{
+			OwnerAI->AICombat->EquipDagger();
+		}
 
 		if (OwnerAI->GetCharacterMovement())
 		{
@@ -115,23 +167,25 @@ void UAIStateMachineComponent::TickComponent(
 
 		break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Follow:
 
-		if (!TargetActor) return;
+		if (!TargetActor)
+			return;
 
 	{
 		float Distance = FVector::Dist(
 			OwnerAI->GetActorLocation(),
 			TargetActor->GetActorLocation());
 
-		/* Too far → sprint */
+		/* Sprint if too far */
 		if (OwnerAI->bCanSprint && Distance > OwnerAI->SprintDistance)
 		{
 			CurrentState = EAIState::Unequip;
 			break;
 		}
 
+		/* Normal follow */
 		AIController->MoveToActor(TargetActor, AcceptanceRadius);
 
 		if (Distance <= AttackRange)
@@ -142,10 +196,14 @@ void UAIStateMachineComponent::TickComponent(
 
 	break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Unequip:
 
-		OwnerAI->AICombat->UnequipWeapon();
+		/* Use character equip toggle system */
+		if (OwnerAI->bIsEquipped)
+		{
+			OwnerAI->ToggleEquip();
+		}
 
 		if (OwnerAI->GetCharacterMovement())
 		{
@@ -156,7 +214,7 @@ void UAIStateMachineComponent::TickComponent(
 
 		break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Sprint:
 
 		if (!TargetActor) return;
@@ -176,15 +234,54 @@ void UAIStateMachineComponent::TickComponent(
 
 	break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Attack:
 
 	{
+		if (!SlotManager)
+			return;
+
+		/* Request combat slot */
+		if (!bHasCombatSlot)
+		{
+			CombatSlotIndex = SlotManager->RequestSlot(TargetActor, OwnerAI);
+
+			if (CombatSlotIndex >= 0)
+			{
+				bHasCombatSlot = true;
+			}
+			else
+			{
+				CurrentState = EAIState::Wait;
+				break;
+			}
+		}
+
+		/* Move to orbit position */
+		FVector OrbitLocation = SlotManager->GetOrbitLocation(TargetActor,CombatSlotIndex,OwnerAI->OrbitRadius);
+
+		AIController->MoveToLocation(OrbitLocation);
+
+		/* always face target */
+		FVector Direction =
+			TargetActor->GetActorLocation() - OwnerAI->GetActorLocation();
+
+		Direction.Z = 0;
+
+		if (!Direction.IsNearlyZero())
+		{
+			FRotator TargetRot = Direction.Rotation();
+			OwnerAI->SetActorRotation(TargetRot);
+		}
+
 		float Time = GetWorld()->GetTimeSeconds();
 
 		if (Time - LastAttackTime >= AttackCooldown)
 		{
-			OwnerAI->AICombat->Attack();
+			if (OwnerAI->AICombat)
+			{
+				OwnerAI->AICombat->Attack();
+			}
 
 			LastAttackTime = Time;
 
@@ -194,15 +291,23 @@ void UAIStateMachineComponent::TickComponent(
 
 	break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	case EAIState::Wait:
 
-		if (!TargetActor) return;
+		if (!TargetActor)
+			return;
 
 	{
 		float Distance = FVector::Dist(
 			OwnerAI->GetActorLocation(),
 			TargetActor->GetActorLocation());
+
+		/* Release slot after attack */
+		if (bHasCombatSlot && SlotManager)
+		{
+			SlotManager->ReleaseSlot(TargetActor, OwnerAI);
+			bHasCombatSlot = false;
+		}
 
 		if (Distance > AttackRange)
 		{
@@ -216,7 +321,7 @@ void UAIStateMachineComponent::TickComponent(
 
 	break;
 
-	/* ----------------------------------------------------- */
+	/* --------------------------- */
 	default:
 		break;
 	}
